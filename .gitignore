@@ -1,0 +1,14 @@
+# Raw/generated datasets - excluded per assignment spec (not part of submission ZIP)
+*.csv
+*.parquet
+!taxi_zone_lookup.csv
+
+# Python virtual environment
+bda-env/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# mrjob local runner temp output
+mr_task1_output.txt
