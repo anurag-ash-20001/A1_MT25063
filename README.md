@@ -2,6 +2,127 @@
 
 Student ID: <MT25063> (rename this folder and the final ZIP to `A1_<student_id>`)
 
+## Ubuntu Quick Start (complete, from a fresh machine)
+
+This is the spec's required machine (see `MACHINE_CONFIG["os"]` below) — follow this
+section for the graded run. Commands assume a fresh Ubuntu install with nothing set
+up yet, run from the project root in a normal terminal. (Written to match the spec
+exactly; unlike the Windows section below, this was not executed on a live Ubuntu
+box by the assistant that wrote it — if any step errors, check versions with
+`lsb_release -a` and adjust package names accordingly.)
+
+### 1. System packages (Java, build tools, curl)
+```bash
+sudo apt update
+sudo apt install -y build-essential curl git openjdk-17-jdk-headless
+java -version
+```
+
+### 2. Python 3.11.11 via pyenv
+```bash
+curl https://pyenv.run | bash
+
+# add to ~/.bashrc, then restart your shell (or `exec $SHELL`):
+echo 'export PYENV_ROOT="$HOME/.pyenv"' >> ~/.bashrc
+echo '[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.bashrc
+echo 'eval "$(pyenv init -)"' >> ~/.bashrc
+exec $SHELL
+
+pyenv install 3.11.11
+pyenv local 3.11.11
+python --version   # should print 3.11.11
+```
+
+### 3. Virtual environment + packages
+```bash
+rm -rf bda-env
+python -m venv bda-env
+source bda-env/bin/activate
+
+python -m pip install --upgrade pip
+python -m pip install "pandas<3" mrjob pyspark duckdb pyarrow matplotlib
+```
+Every command below assumes this venv is activated (`source bda-env/bin/activate`)
+in the current shell.
+
+### 4. DuckDB CLI (so `duckdb -c "..."` / `duckdb < file.sql` work directly)
+```bash
+curl https://install.duckdb.org | sh
+export PATH="$HOME/.duckdb/cli/latest:$PATH"
+echo 'export PATH="$HOME/.duckdb/cli/latest:$PATH"' >> ~/.bashrc
+duckdb --version
+```
+
+### 5. Generate the datasets (CSV + Parquet, all 4 sizes)
+```bash
+duckdb < data_prep/prepare_data.sql
+
+duckdb -c "SELECT COUNT(*) FROM read_csv_auto('taxi_100k.csv');"   # expect 100000
+duckdb -c "SELECT COUNT(*) FROM read_csv_auto('taxi_500k.csv');"   # expect 500000
+duckdb -c "SELECT COUNT(*) FROM read_csv_auto('taxi_1m.csv');"     # expect 1000000
+duckdb -c "SELECT COUNT(*) FROM read_csv_auto('taxi_2m.csv');"     # expect 2000000
+```
+
+### 6. Task 1 — functional check (one system at a time, not timed)
+```bash
+python mapreduce/task1.py -r local taxi_1m.csv > mr_task1_output.txt
+python spark/task1.py taxi_1m.csv
+duckdb -c ".read duckdb/task1.sql"
+```
+
+### 7. Task 1 / Task 4 — timed runs (writes `results/timings.csv`)
+```bash
+python utils/run_experiments.py --task task1 --system mapreduce --dataset taxi_1m.csv --rows 1000000
+python utils/run_experiments.py --task task1 --system spark     --dataset taxi_1m.csv --rows 1000000
+python utils/run_experiments.py --task task1 --system duckdb    --dataset taxi_1m.csv --rows 1000000
+
+# full Task 4 scaling sweep (4 sizes x 3 systems):
+python utils/run_experiments.py --task task4
+```
+
+### 8. Task 2
+```bash
+python spark/task2.py taxi_2m.parquet
+
+duckdb -c "EXPLAIN SELECT * FROM read_parquet('taxi_2m.parquet') WHERE PULocationID = 161 AND fare_amount > 30.00;" \
+  > duckdb/task2_explain.txt
+duckdb -c "EXPLAIN SELECT tpep_pickup_datetime, tpep_dropoff_datetime, trip_distance, fare_amount FROM read_parquet('taxi_2m.parquet') WHERE PULocationID = 161 AND fare_amount > 30.00;" \
+  >> duckdb/task2_explain.txt
+
+python utils/run_experiments.py --task task2 --dataset taxi_2m.parquet --rows 2000000
+```
+
+### 9. Task 3
+```bash
+python spark/task3.py taxi_2m.parquet taxi_zone_lookup.csv
+duckdb -c ".read duckdb/task3.sql"
+python utils/run_experiments.py --task task3 --dataset taxi_2m.parquet --lookup taxi_zone_lookup.csv --rows 2000000
+```
+
+### 10. Task 5
+```bash
+python spark/task5.py taxi_1m.parquet
+python utils/run_experiments.py --task task5 --dataset taxi_1m.parquet --rows 1000000
+```
+
+### 11. Checks
+```bash
+head results/timings.csv
+wc -l results/timings.csv
+cat results/errors.txt 2>/dev/null
+cat spark/task2_explain.txt
+cat duckdb/task2_explain.txt
+```
+
+### Known gap: plotting
+Same as the Windows section below — `utils/plot_scaling.py`, referenced later in
+this README, does not exist in this repo. `results/scaling_plot.png` already
+exists but there is currently no script here to regenerate it.
+
+Before any timed run, fill in `STUDENT_ID`, `MACHINE_CONFIG`, `PYTHON_VERSION`, and
+`TOOL_VERSIONS` at the top of `utils/run_experiments.py` with this machine's real
+values (`MACHINE_CONFIG["os"]` should say what `lsb_release -a` actually reports).
+
 ## Windows Quick Start (tested — copy-paste exactly, no errors)
 
 The rest of this README assumes Linux/Ubuntu (per the spec's machine requirement).
